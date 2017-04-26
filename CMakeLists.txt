@@ -228,6 +228,7 @@ set(QITYPE_H       qi/anyfunction.hpp
                    qi/type/detail/accessor.hxx
                    qi/type/detail/anyreference.hpp
                    qi/type/detail/anyreference.hxx
+                   qi/type/detail/anyreferenceoptional.hxx
                    qi/type/detail/anyvalue.hpp
                    qi/type/detail/anyvalue.hxx
                    qi/type/detail/anyfunction.hxx
@@ -253,6 +254,7 @@ set(QITYPE_H       qi/anyfunction.hpp
                    qi/type/detail/inttypeinterface.hxx
                    qi/type/detail/listtypeinterface.hxx
                    qi/type/detail/maptypeinterface.hxx
+                   qi/type/detail/optionaltypeinterface.hxx
                    qi/type/detail/pointertypeinterface.hxx
                    qi/type/detail/staticobjecttype.hpp
                    qi/type/detail/stringtypeinterface.hxx
