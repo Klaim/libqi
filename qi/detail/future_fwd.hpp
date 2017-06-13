@@ -979,7 +979,7 @@ namespace qi {
       ValueType                _value;
       CancelCallback           _onCancel;
       boost::function<void (ValueType)> _onDestroyed;
-      FutureCallbackType       _async;
+      std::atomic<FutureCallbackType> _async;
       qi::Atomic<unsigned int> _promiseCount;
 
       template <typename F> // FunctionObject<R()> F (R unconstrained)
