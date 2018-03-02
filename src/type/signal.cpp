@@ -523,6 +523,7 @@ namespace qi {
 
   SignalBase::~SignalBase()
   {
+    QI_ASSERT_TRUE(_p.unique());
   }
 
   std::vector<SignalSubscriber> SignalBase::subscribers()
