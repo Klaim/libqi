@@ -325,6 +325,7 @@ set(QIM_H qi/api.hpp
           qi/messaging/clientauthenticatorfactory.hpp
           qi/messaging/detail/autoservice.hxx
           qi/messaging/gateway.hpp
+          qi/messaging/servicedirectoryproxy.hpp
           qi/messaging/serviceinfo.hpp
           qi/applicationsession.hpp
           qi/session.hpp
@@ -338,7 +339,6 @@ set(QIM_C src/messaging/applicationsession.cpp
           src/messaging/boundobject.hpp
           src/messaging/clientauthenticator_p.hpp
           src/messaging/clientauthenticator.cpp
-          src/messaging/gateway_p.hpp
           src/messaging/gateway.cpp
           src/messaging/message.hpp
           src/messaging/message.cpp
@@ -354,6 +354,7 @@ set(QIM_C src/messaging/applicationsession.cpp
           src/messaging/servicedirectory.hpp
           src/messaging/servicedirectoryclient.hpp
           src/messaging/servicedirectoryclient.cpp
+          src/messaging/servicedirectoryproxy.cpp
           src/messaging/serviceinfo.cpp
           src/messaging/session.cpp
           src/messaging/session_p.hpp
