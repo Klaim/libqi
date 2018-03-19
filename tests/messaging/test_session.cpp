@@ -22,6 +22,7 @@
 #include <qi/testutils/testutils.hpp>
 
 #include <testsession/testsessionpair.hpp>
+#include "objectio.hpp"
 
 using namespace qi;
 using namespace test;
