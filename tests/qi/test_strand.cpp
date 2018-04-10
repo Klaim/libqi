@@ -462,3 +462,60 @@ TEST(TestStrand, CallScheduleFromStrandContextDoesNotExecuteImmediately)
   const std::vector<int> expected{0, 1};
   ASSERT_EQ(expected, values);
 }
+
+TEST(TestStrand, LastStrandedThenContinuationCalledWhenCanceled)
+{
+  // This test was written because of a bug making one or several continuations
+  // following a cancel (sequence point 5 to 7) randomly never be executed
+  // while the whole graph is correctly finished.
+  // This issue required the following context:
+  // 1. Execute all the continuations in the qi::Strand qi::Strand::schedulerFor/unwrappedSchedulerFor
+  //    continuation in the task graph, in particular the last .then continuation;
+  // 2. The future corresponding to the task graph have to request cancel
+  //    before the 2 last continuation is executed;
+  // 3. The promise have to set itself to canceled when it gets a cancel request
+  //    (the problem do not appear if the promise was set outside the cancel callback);
+
+  qi::Strand strand;
+  std::vector<int> executionSequence;
+  static const std::vector<int> expectedSequence {0, 1, 2, 3, 4, 5, 6, 7};
+  std::atomic<bool> canceledAsExpected {false};
+
+  qi::Promise<void> promise {[&] (qi::Promise<void>& p) {
+    executionSequence.push_back(3);
+    p.setCanceled(); // Requirement 3
+  }};
+
+  qi::Promise<void> promiseSync1, promiseSync2;
+
+  qi::Future<void> future = strand.defer([&] {executionSequence.push_back(0);})
+    .then(strand.unwrappedSchedulerFor([&] (qi::Future<void>) {
+       executionSequence.push_back(1);
+       auto fut = promise.future().then(strand.unwrappedSchedulerFor( // Requirement 1
+        [&] (qi::Future<void> result) {
+          if(result.isCanceled())
+            canceledAsExpected = true;
+          executionSequence.push_back(4);
+        })).unwrap()
+        .then(strand.unwrappedSchedulerFor([&] (qi::Future<void>) {
+          executionSequence.push_back(5);
+        })).unwrap()
+        .then(strand.unwrappedSchedulerFor([&] (qi::Future<void>) {
+          executionSequence.push_back(6);
+        })).unwrap()
+        .then(strand.unwrappedSchedulerFor([&] (qi::Future<void>) {
+          executionSequence.push_back(7);
+        })).unwrap();
+       executionSequence.push_back(2);
+       promiseSync1.setValue(nullptr);// Requirement 2
+       promiseSync2.future().wait();// Requirement 2
+       return fut;
+     })).unwrap();
+
+  promiseSync1.future().wait(); // Requirement 2
+  future.cancel(); // Requirement 2
+  promiseSync2.setValue(nullptr); // Requirement 2
+  future.wait();
+  EXPECT_EQ(expectedSequence, executionSequence);
+  EXPECT_TRUE(canceledAsExpected);
+}
