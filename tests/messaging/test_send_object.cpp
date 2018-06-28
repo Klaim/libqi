@@ -270,7 +270,6 @@ TEST(SendObject, IdentityOfRemoteObjectsMoreIndirections)
 }
 
 
-
 class KikooMan
 {
 public:

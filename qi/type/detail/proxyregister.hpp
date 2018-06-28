@@ -50,6 +50,13 @@ public:
     Proxy* ptr = toProxy(instance);
     return ptr->asObject().metaObject();
   }
+
+  PtrUid ptrUid(void* instance) const override
+  {
+    Proxy* ptr = toProxy(instance);
+    return ptr->asObject().ptrUid();
+  }
+
   qi::Future<AnyReference> metaCall(void* instance, AnyObject context, unsigned int method, const GenericFunctionParameters& params, MetaCallType callType, Signature returnSignature) override
   {
     Proxy* ptr = toProxy(instance);
