@@ -171,7 +171,7 @@ TEST(SendObject, pass_obj_made_from_module)
   remotePlop.disconnect(signalLink);
 }
 
-TEST(Module, IdentityOfRemoteObjects)
+TEST(SendObject, IdentityOfRemoteObjects)
 {
   TestSessionPair p;
   p.server()->registerService("plop", boost::make_shared<ObjectEmitter>());
@@ -202,7 +202,7 @@ struct dummy_t
 
 QI_REGISTER_OBJECT(dummy_t, one);
 
-TEST(Module, IdentityOfRemoteObjectsDifferentProcess)
+TEST(SendObject, IdentityOfRemoteObjectsDifferentProcess)
 {
   using namespace qi;
 
@@ -218,12 +218,12 @@ TEST(Module, IdentityOfRemoteObjectsDifferentProcess)
 
   service.call<void>("give", original);
   AnyObject copy0 = service.call<AnyObject>("take");
-  ASSERT_EQ(copy0, original);
+  EXPECT_EQ(copy0, original);
 
   service.call<void>("give", copy0);
   AnyObject copy1 = service.call<AnyObject>("take");
-  ASSERT_EQ(copy1, copy0);
-  ASSERT_EQ(copy1, original);
+  EXPECT_EQ(copy1, copy0);
+  EXPECT_EQ(copy1, original);
 }
 
 class ObjectStore
@@ -242,7 +242,7 @@ public:
 
 QI_REGISTER_OBJECT(ObjectStore, get, set);
 
-TEST(Module, IdentityOfRemoteObjectsMoreIndirections)
+TEST(SendObject, IdentityOfRemoteObjectsMoreIndirections)
 {
   qi::AnyObject originalObject(boost::make_shared<dummy_t>());
   TestSessionPair pairA;
@@ -268,6 +268,207 @@ TEST(Module, IdentityOfRemoteObjectsMoreIndirections)
   EXPECT_EQ(objA, objC);
   EXPECT_EQ(objB, objC);
 }
+
+
+
+class KikooMan
+{
+public:
+  virtual ~KikooMan() = default;
+  virtual int get() const = 0;
+};
+
+QI_REGISTER_OBJECT(KikooMan, get)
+
+class KikooManProxy : public KikooMan, public qi::Proxy
+{
+public:
+  KikooManProxy(qi::AnyObject o)
+    : qi::Proxy(o) {}
+
+  int get() const override { return asObject().call<int>("get"); }
+};
+QI_REGISTER_PROXY_INTERFACE(KikooManProxy, KikooMan);
+
+static std::atomic<int> nextKikooManId{ 0 };
+
+class KikooManImpl : public KikooMan
+{
+  int id = nextKikooManId++;
+public:
+  int get() const override { return id; }
+};
+QI_REGISTER_OBJECT(KikooManImpl, get)
+
+
+TEST(KikooMan, IdentityDependsOnObjectAddress)
+{
+  using namespace qi;
+  auto realObject = boost::make_shared<KikooManImpl>();
+  const PtrUid ptruid{ os::getMachineIdAsUuid(), os::getProcessUuid(), realObject.get() };
+  Object<KikooMan> a{ AnyObject{ realObject } };
+  Object<KikooMan> b{ AnyObject{ realObject } };
+
+  EXPECT_EQ(ptruid, a.ptrUid());
+  EXPECT_EQ(a, b);
+  EXPECT_EQ(a->get(), b->get());
+}
+
+TEST(KikooMan, IdentityDependsOnSpecializedObjectAddress)
+{
+  using namespace qi;
+  auto realObject = boost::make_shared<KikooManImpl>();
+  const PtrUid ptruid{ os::getMachineIdAsUuid(), os::getProcessUuid(), realObject.get() };
+  Object<KikooMan> a{ realObject };
+  Object<KikooMan> b{ realObject };
+
+  EXPECT_EQ(ptruid, a.ptrUid());
+  EXPECT_EQ(a, b);
+  EXPECT_EQ(a->get(), b->get());
+}
+
+
+
+TEST(KikooMan, IdentityOfRemoteObjectsSpecializedWithErasure)
+{
+  using namespace qi;
+
+  TestSessionPair sessions;
+
+  AnyObject original{ boost::make_shared<KikooManImpl>() };
+  sessions.server()->registerService("Store", boost::make_shared<ObjectStore>());
+  AnyObject store = sessions.client()->service("Store");
+  store.call<void>("set", original);
+
+  Object<KikooMan> objectA = store.call<AnyObject>("get");
+  EXPECT_EQ(original, objectA) << "original ptruid: {" << original.ptrUid() << "}; objectA ptruid: {" << objectA.ptrUid() << "};";
+
+}
+
+TEST(KikooMan, IdentityOfRemoteObjectsSpecializedInterfaceOnly)
+{
+  using namespace qi;
+
+  TestSessionPair sessions;
+
+  AnyObject original{ boost::make_shared<KikooManImpl>() };
+  sessions.server()->registerService("Store", boost::make_shared<ObjectStore>());
+  AnyObject store = sessions.client()->service("Store");
+  store.call<void>("set", original);
+
+  Object<KikooMan> objectA = store.call<Object<KikooMan>>("get");
+  EXPECT_EQ(original, objectA) << "original ptruid: {" << original.ptrUid() <<"}; vs objectA ptruid: {" << objectA.ptrUid() << "};";
+
+}
+
+class KikooManStore
+{
+public:
+  virtual qi::Object<KikooMan> get() const = 0;
+  virtual void set(qi::Object<KikooMan> o) = 0;
+};
+QI_REGISTER_OBJECT(KikooManStore, get, set);
+
+class KikooManStoreProxy : public KikooManStore, public qi::Proxy
+{
+public:
+  KikooManStoreProxy(qi::AnyObject o)
+    : qi::Proxy(o) {}
+
+  qi::Object<KikooMan> get() const override
+  {
+    return asObject().call<qi::Object<KikooMan>>("get");
+  }
+  void set(qi::Object<KikooMan> o) override
+  {
+    return asObject().call<void>("set", o);
+  }
+};
+QI_REGISTER_PROXY_INTERFACE(KikooManStoreProxy, KikooManStore);
+
+class KikooManStoreImpl : KikooManStore
+{
+  qi::Object<KikooMan> obj;
+public:
+  qi::Object<KikooMan> get() const override
+  {
+    return obj;
+  }
+  void set(qi::Object<KikooMan> o) override
+  {
+    obj = o;
+  }
+};
+QI_REGISTER_OBJECT(KikooManStoreImpl, get, set);
+
+TEST(KikooMan, IdentityOfRemoteObjectsSpecializedInterfaceOnlySpecializedStore)
+{
+  using namespace qi;
+
+  TestSessionPair sessions;
+
+  Object<KikooMan> original{ boost::make_shared<KikooManImpl>() };
+  sessions.server()->registerService("Store", boost::make_shared<KikooManStoreImpl>());
+  Object<KikooManStore> store = sessions.client()->service("Store");
+  store->set(original);
+
+  Object<KikooMan> objectA = store->get();
+  EXPECT_EQ(original, objectA) << "original ptruid: {" << original.ptrUid() << "}; vs objectA ptruid: {" << objectA.ptrUid() << "};";
+
+}
+
+
+
+TEST(KikooMan, IdentityOfRemoteSpecializedObjectsTypeErasedDifferentProcess)
+{
+  using namespace qi;
+
+  const Url serviceUrl{ "tcp://127.0.0.1:54321" };
+  test::ScopedProcess _{ path::findBin("remoteserviceowner"),
+  { "--qi-standalone", "--qi-listen-url=" + serviceUrl.str() }
+  };
+
+  auto client = makeSession();
+  client->connect(serviceUrl);
+  AnyObject service = client->service("PingPongService");
+  Object<KikooMan> original{ boost::make_shared<KikooManImpl>() };
+
+  service.call<void>("give", original);
+  AnyObject copy0 = service.call<AnyObject>("take");
+  EXPECT_EQ(copy0, original) << "copy0 ptruid: {" << copy0.ptrUid() << "}; vs original ptruid: {" << original.ptrUid() << "};";
+
+  service.call<void>("give", copy0);
+  AnyObject copy1 = service.call<AnyObject>("take");
+  EXPECT_EQ(copy1, copy0) << "copy1 ptruid: {" << copy1.ptrUid() << "}; vs copy0 ptruid: {" << copy0.ptrUid() << "};";
+  EXPECT_EQ(copy1, original) << "copy1 ptruid: {" << copy1.ptrUid() << "}; vs original ptruid: {" << original.ptrUid() << "};";
+}
+
+
+
+TEST(KikooMan, IdentityOfRemoteSpecializedObjectsDifferentProcess)
+{
+  using namespace qi;
+
+  const Url serviceUrl{ "tcp://127.0.0.1:54321" };
+  test::ScopedProcess _{ path::findBin("remoteserviceowner"),
+  { "--qi-standalone", "--qi-listen-url=" + serviceUrl.str() }
+  };
+
+  auto client = makeSession();
+  client->connect(serviceUrl);
+  AnyObject service = client->service("PingPongService");
+  Object<KikooMan> original{ boost::make_shared<KikooManImpl>() };
+
+  service.call<void>("give", original);
+  Object<KikooMan> copy0 = service.call<Object<KikooMan>>("take");
+  EXPECT_EQ(copy0, original) << "copy0 ptruid: {" << copy0.ptrUid() << "}; vs original ptruid: {" << original.ptrUid() << "};";
+
+  service.call<void>("give", copy0);
+  Object<KikooMan> copy1 = service.call<Object<KikooMan>>("take");
+  EXPECT_EQ(copy1, copy0) << "copy1 ptruid: {" << copy1.ptrUid() << "}; vs copy0 ptruid: {" << copy0.ptrUid() << "};";
+  EXPECT_EQ(copy1, original) << "copy1 ptruid: {" << copy1.ptrUid() << "}; vs original ptruid: {" << original.ptrUid() << "};";
+}
+
 
 class ObjectEmitterFactory
 {
