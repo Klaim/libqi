@@ -123,6 +123,8 @@ namespace qi
     }
   };
 
+  QI_API PtrUid makePtrUidFromAddress(void* address);
+
 } // namespace qi
 
 // Hashable:

@@ -304,7 +304,7 @@ TEST(KikooMan, IdentityDependsOnObjectAddress)
 {
   using namespace qi;
   auto realObject = boost::make_shared<KikooManImpl>();
-  const PtrUid ptruid{ os::getMachineIdAsUuid(), os::getProcessUuid(), realObject.get() };
+  const PtrUid ptruid = makePtrUidFromAddress(realObject.get());
   Object<KikooMan> a{ AnyObject{ realObject } };
   Object<KikooMan> b{ AnyObject{ realObject } };
 
@@ -317,7 +317,7 @@ TEST(KikooMan, IdentityDependsOnSpecializedObjectAddress)
 {
   using namespace qi;
   auto realObject = boost::make_shared<KikooManImpl>();
-  const PtrUid ptruid{ os::getMachineIdAsUuid(), os::getProcessUuid(), realObject.get() };
+  const PtrUid ptruid = makePtrUidFromAddress(realObject.get());
   Object<KikooMan> a{ realObject };
   Object<KikooMan> b{ realObject };
 

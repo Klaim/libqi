@@ -10,6 +10,7 @@
 #include <boost/algorithm/hex.hpp>
 #include <boost/range/algorithm/copy.hpp>
 #include <qi/ptruid.hpp>
+#include <qi/os.hpp>
 #include <ka/sha1.hpp>
 #include <qi/uuid.hpp>
 
@@ -61,4 +62,11 @@ namespace qi
     boost::algorithm::hex(begin(uid), end(uid), std::ostream_iterator<uint8_t>(o));
     return o;
   }
+
+  PtrUid makePtrUidFromAddress(void * address)
+  {
+    return PtrUid(os::getMachineIdAsUuid(), os::getProcessUuid(), address);
+  }
+
 } // qi
+
