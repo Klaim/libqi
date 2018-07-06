@@ -16,6 +16,13 @@ GenericObject::GenericObject(ObjectTypeInterface *type, void *value, const PtrUi
 {
 }
 
+GenericObject::GenericObject(ObjectTypeInterface *type, void *value, boost::optional<PtrUid> maybePtrUid)
+  : type(type)
+  , value(value)
+  , ptrUid(maybePtrUid ? *maybePtrUid : makePtrUidFromAddress(value))
+{
+}
+
 GenericObject::GenericObject(ObjectTypeInterface *type, void *value)
   : type(type)
   , value(value)

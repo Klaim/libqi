@@ -43,6 +43,7 @@ class QI_API GenericObject
 {
 public:
   GenericObject(ObjectTypeInterface *type, void *value, const PtrUid& ptrUid);
+  GenericObject(ObjectTypeInterface *type, void *value, boost::optional<PtrUid> maybePtrUid);
   GenericObject(ObjectTypeInterface *type, void *value);
   ~GenericObject();
   const MetaObject &metaObject();
