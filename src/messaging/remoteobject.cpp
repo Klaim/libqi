@@ -56,6 +56,7 @@ namespace qi {
     if (socket)
       setTransportSocket(socket);
     //fetchMetaObject should be called to make sure the metaObject is valid.
+    qiLogInfo() << "RemoteObject created with service = " << _service << ", object = " << _object;
   }
 
   RemoteObject::RemoteObject(unsigned int service, unsigned int object, qi::MetaObject metaObject, MessageSocketPtr socket)
@@ -69,6 +70,8 @@ namespace qi {
     setMetaObject(metaObject);
     if (socket)
       setTransportSocket(socket);
+
+    qiLogInfo() << "RemoteObject created with service = " << _service << ", object = " << _object;
   }
 
   RemoteObject::~RemoteObject()
@@ -145,7 +148,7 @@ namespace qi {
       qiLogDebug() << "Passing message " << msg.address() << " to host ";
       if (sock)
       {
-        ObjectHost::onMessage(msg, sock);
+        ObjectHost::dispatchToChildren(msg, sock);
       }
     };
 

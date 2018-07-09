@@ -325,10 +325,9 @@ namespace qi {
       }
       obj            = it->second;
     }
-    // We were called from the thread pool: synchronous call is ok
-    //qi::getEventLoop()->post(boost::bind<void>(&BoundObject::onMessage, obj, msg, socket));
+
     obj->onMessage(msg, socket);
-  } // TODO: heap-use-after-free: memory freed here, in ~shared_ptr, probably the local BoundAnyObject obj;
+  }
 
   void Server::disconnectSignals(const MessageSocketPtr& socket, const SocketSubscriber& subscriber)
   {

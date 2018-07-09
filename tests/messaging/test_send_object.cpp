@@ -1047,3 +1047,152 @@ TEST(SendObject, PropertySetWithNullObjectNotifiesSubscribers)
   ASSERT_TRUE(test::finishesWithValue(fut));
   ASSERT_FALSE(fut.value());
 }
+
+
+struct MyService {
+
+  MyService()
+  {
+    list.reserve(5000);
+  }
+
+  void setObject(qi::AnyObject obj)
+  {
+    /// storing copies of the original object (those are kept alive)
+    list.push_back(obj);
+
+  }
+
+  void setObjectList(std::vector<qi::AnyObject> obj)
+  {
+    /// storing copies of the original object (those are kept alive)
+    list = std::move(obj);
+
+  }
+
+  void test()
+  {
+    using namespace std::chrono;
+    static int callCount = 0;
+    ++callCount;
+    qi::AnyObject& o = list.back();
+    //qi::AnyObject& o = obj;
+
+    // getting the content of the property
+    for (int i = 0; i < 1; ++i)
+    {
+      const auto startTime = high_resolution_clock::now();
+
+      //int content = o.property<int>("prop").value();
+      int cont = o.call<int>("foo");
+
+      const auto endTime = high_resolution_clock::now();
+
+      const auto discussDuration = endTime - startTime;
+
+      qiLogInfo("TEST") << "Test " << callCount << " call " << i << " ID{" << o.ptrUid() << "} : "
+        << duration_cast<milliseconds>(discussDuration).count() << " ms ("
+        << duration_cast<nanoseconds>(discussDuration).count() << " ns)"
+        ;
+    }
+
+  }
+
+  qi::AnyObject getIt()
+  {
+    return list.back();
+  }
+
+  void clear()
+  {
+    list.clear();
+  }
+
+  std::vector<qi::AnyObject> list;
+
+};
+
+QI_REGISTER_OBJECT(MyService, setObject, setObjectList, test, clear, getIt)
+
+struct MyObject {
+  int foo() {
+    return 42;
+  }
+};
+
+QI_REGISTER_OBJECT(MyObject, foo)
+
+TEST(SendObject, callProperties)
+{
+  TestSessionPair sessions;
+
+  qi::AnyObject myService = boost::make_shared<MyService>();
+  sessions.server()->registerService("MyService", myService);
+
+
+  qi::AnyObject s = sessions.client()->service("MyService");
+
+  int MAX = 1000;
+
+  qi::AnyObject myObject = boost::make_shared<MyObject>();
+  s.call<void>("setObject", myObject);
+  s.call<void>("test");
+
+  std::vector<qi::AnyObject> objectList;
+  objectList.reserve(MAX);
+  for (int i = 0; i < MAX; i++)
+  {
+    objectList.push_back(myObject);
+  }
+  s.call<void>("setObjectList", objectList);
+  s.call<void>("test");
+
+  s.call<void>("clear");
+  objectList.clear();
+  s.call<void>("setObject", myObject);
+  s.call<void>("test");
+
+  // we can see in the logs that getting in the property takes more and more time
+}
+
+
+TEST(SendObject, callPropertiesRemote)
+{
+  using namespace qi;
+
+  const Url serviceUrl{ "tcp://127.0.0.1:54321" };
+  test::ScopedProcess _{ path::findBin("remoteserviceowner"),
+  { "--qi-standalone", "--qi-listen-url=" + serviceUrl.str() }
+  };
+
+  auto client = makeSession();
+  client->connect(serviceUrl);
+  //AnyObject store = client->service("PingPongService");
+
+  //store.call<void>("give", boost::make_shared<MyService>());
+
+
+  AnyObject s = client->service("MyService");  //store.call<AnyObject>("take");
+
+  int MAX = 10;
+
+  AnyObject myObject = boost::make_shared<MyObject>();
+  s.call<void>("setObject", myObject);
+  s.call<void>("test");
+
+  std::vector<AnyObject> objectList;
+  objectList.reserve(MAX);
+  for (int i = 0; i < MAX; i++)
+  {
+    objectList.push_back(myObject);
+  }
+  s.call<void>("setObjectList", objectList);
+  s.call<void>("test");
+
+  s.call<void>("clear");
+  objectList.clear();
+  s.call<void>("setObject", myObject);
+  s.call<void>("test");
+
+  // we can see in the logs that getting in the property takes more and more time
+}

@@ -27,8 +27,12 @@ ObjectHost::ObjectHost(unsigned int service)
    map.clear();
  }
 
+  thread_local int findDepth = 0;
+
 BoundAnyObject ObjectHost::recursiveFindObject(uint32_t objectId)
 {
+  ++findDepth;
+  auto scopedDepth = ka::scoped([&]{ --findDepth; });
   boost::recursive_mutex::scoped_lock lock(_mutex);
   auto it = _objectMap.find(objectId);
   auto e = end(_objectMap);
@@ -58,9 +62,10 @@ BoundAnyObject ObjectHost::recursiveFindObject(uint32_t objectId)
   return {};
 }
 
-void ObjectHost::onMessage(const qi::Message &msg, MessageSocketPtr socket)
+void ObjectHost::dispatchToChildren(const qi::Message &msg, MessageSocketPtr socket)
 {
-  BoundAnyObject obj{recursiveFindObject(msg.object())};
+  const auto objectId = msg.object();
+  BoundAnyObject obj{recursiveFindObject(objectId)};
   if (!obj)
   {
     // Should we treat this as an error ? Returning without error is the

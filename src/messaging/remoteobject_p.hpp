@@ -34,7 +34,10 @@ namespace qi {
     qi::Future<qi::SignalLink>  future;
   };
 
-  class RemoteObject : public qi::DynamicObject, public ObjectHost, public Trackable<RemoteObject> {
+  class RemoteObject
+    : public qi::DynamicObject
+    , public ObjectHost
+    , public Trackable<RemoteObject> {
   public:
     RemoteObject();
     RemoteObject(unsigned int service, qi::MessageSocketPtr socket = qi::MessageSocketPtr());

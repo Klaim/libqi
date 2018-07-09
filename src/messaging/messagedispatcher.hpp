@@ -40,7 +40,7 @@ namespace qi {
     qi::SignalLink messagePendingConnect(unsigned int serviceId, unsigned int objectId, boost::function<void (const qi::Message&)> fun);
     void           messagePendingDisconnect(unsigned int serviceId, unsigned int objectId, qi::SignalLink linkId);
 
-  public:
+  private:
     using Target = std::pair<unsigned int, unsigned int>;
     using OnMessageSignal = Signal<const qi::Message&>;
     // use shared-ptr on signal so that we may hold it without holding the map lock
