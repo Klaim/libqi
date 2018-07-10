@@ -13,7 +13,8 @@
 #include "message.hpp"
 
 namespace qi {
-
+  class MessageSocket;
+  using MessageSocketPtr = boost::shared_ptr<MessageSocket>;
   /**
    * @brief The MessageDispatcher class dispatches messages from a TransportSocket
    * \internal
@@ -36,9 +37,10 @@ namespace qi {
     void dispatch(const qi::Message& msg);
     void cleanPendingMessages();
 
-    static const unsigned int ALL_OBJECTS;
     qi::SignalLink messagePendingConnect(unsigned int serviceId, unsigned int objectId, boost::function<void (const qi::Message&)> fun);
     void           messagePendingDisconnect(unsigned int serviceId, unsigned int objectId, qi::SignalLink linkId);
+
+    void setOwner(MessageSocketPtr owner){ _owner = owner; }
 
   private:
     using Target = std::pair<unsigned int, unsigned int>;
@@ -47,6 +49,7 @@ namespace qi {
     using SignalMap = std::map<Target, boost::shared_ptr<OnMessageSignal> >;
     using MessageSentMap = std::map<unsigned int, MessageAddress>;
 
+    MessageSocketPtr       _owner;
     ExecutionContext*      _execContext;
     SignalMap              _signalMap;
     boost::recursive_mutex _signalMapMutex;

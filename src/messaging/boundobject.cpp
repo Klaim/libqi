@@ -245,7 +245,10 @@ namespace qi {
       if (msg.object() > _objectId)
       {
         qiLogDebug() << "Passing message to children";
-        ObjectHost::dispatchToChildren(msg, socket);
+        if(!dispatchToAnyBoundObject(msg, socket))
+        {
+          ObjectHost::dispatchToChildren(msg, socket);
+        }
         return;
       }
 

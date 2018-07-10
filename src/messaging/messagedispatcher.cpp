@@ -4,6 +4,9 @@
 */
 #include "messagedispatcher.hpp"
 
+#include "boundobject.hpp"
+#include "messagesocket.hpp"
+
 qiLogCategory("qimessaging.messagedispatcher");
 
 namespace qi {
@@ -31,7 +34,6 @@ namespace qi {
   }
 #endif
 
-  const unsigned int MessageDispatcher::ALL_OBJECTS = -1;
 
   MessageDispatcher::MessageDispatcher(ExecutionContext* execContext)
     : _execContext{ execContext }
@@ -52,7 +54,14 @@ namespace qi {
     }
 
     {
-      boost::shared_ptr<OnMessageSignal> sig[2];
+      QI_ASSERT(_owner);
+      if (dispatchToAnyBoundObject(msg, _owner))
+      {
+        return;
+      }
+
+
+      boost::shared_ptr<OnMessageSignal> sig;
       bool hit = false;
       {
         boost::recursive_mutex::scoped_lock sl(_signalMapMutex);
@@ -61,19 +70,11 @@ namespace qi {
         if (it != _signalMap.end())
         {
           hit = true;
-          sig[0] = it->second;
-        }
-        it = _signalMap.find(Target(msg.service(), ALL_OBJECTS));
-        if (it != _signalMap.end())
-        {
-          hit = true;
-          sig[1] = it->second;
+          sig = it->second;
         }
       }
-      if (sig[0])
-        (*sig[0])(msg);
-      if (sig[1])
-        (*sig[1])(msg);
+      if (sig)
+        (*sig)(msg);
       if (!hit) // FIXME: that should probably never happen, raise log level
         qiLogDebug() << "No listener for service " << msg.service();
     }
@@ -91,28 +92,20 @@ namespace qi {
 
   void MessageDispatcher::messagePendingDisconnect(unsigned int serviceId, unsigned int objectId, qi::SignalLink linkId)
   {
-    // Do not hold the lock when invoking disconnect()
-    // or deadlock may occur as disconnect() waits for
-    // handlers to finish before returning.
     boost::shared_ptr<OnMessageSignal> sig;
+    boost::recursive_mutex::scoped_lock sl(_signalMapMutex);
+    SignalMap::iterator it = _signalMap.find(Target(serviceId, objectId));
+    if (it != _signalMap.end())
+      sig = it->second;
+    else
+      return;
+
+    if (sig)
+      sig->disconnectAsync(linkId);
+
+    if (!sig || !sig->hasSubscribers())
     {
-      boost::recursive_mutex::scoped_lock sl(_signalMapMutex);
-      SignalMap::iterator it;
-      it = _signalMap.find(Target(serviceId, objectId));
-      if (it != _signalMap.end())
-        sig = it->second;
-      else
-        return;
-    }
-    sig->disconnectAsync(linkId);
-    if (!sig->hasSubscribers())
-    {
-      // We need to re-acquire lock and check emptyness when locked
-       boost::recursive_mutex::scoped_lock sl(_signalMapMutex);
-       SignalMap::iterator it;
-       it = _signalMap.find(Target(serviceId, objectId));
-       if (it != _signalMap.end() && !it->second->hasSubscribers())
-         _signalMap.erase(it);
+      _signalMap.erase(it);
     }
   }
 

@@ -64,7 +64,7 @@ struct MyService {
       //int content = o.property<int>("prop").value();
       std::this_thread::sleep_for(std::chrono::seconds(1));
       int cont = o.call<int>("foo");
-
+      qiLogInfo("KIKOO") << "VALUE  = "  << cont;
       //const auto endTime = high_resolution_clock::now();
 
       /*const auto discussDuration = endTime - startTime;

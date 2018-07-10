@@ -96,12 +96,9 @@ namespace qi {
     //do not set the socket on the remote object
     if (socket) {
       qiLogDebug() << "Adding connection to socket" << (void*)socket.get();
-      // We must hook on ALL_OBJECTS in case our objectHost gets filled, even
-      // if we are a sub-object.
-      // We have no mechanism to bounce objectHost registration
-      // to a 'parent' object.
+
       _linkMessageDispatcher = socket->messagePendingConnect(_service,
-        MessageSocket::ALL_OBJECTS,
+        _object,
         track(boost::bind<void>(&RemoteObject::onMessagePending, this, _1), this));
       _linkDisconnected = socket->disconnected.connect(
           track([=](const std::string& reason) { onSocketDisconnected(reason); }, this));
@@ -154,7 +151,11 @@ namespace qi {
 
     if (msg.object() != _object)
     {
-      passToHost();
+      if (!dispatchToAnyBoundObject(msg, sock))
+      {
+        passToHost();
+      }
+      qiLogError() << "Remote Object " << _object << " received message which is not destined to it: " << msg;
       return;
     }
 
@@ -573,7 +574,7 @@ namespace qi {
     if (socket)
     { // Do not hold any lock when invoking signals.
         qiLogDebug() << "Removing connection from socket " << (void*)socket.get();
-        socket->messagePendingDisconnect(_service, MessageSocket::ALL_OBJECTS, _linkMessageDispatcher);
+        socket->messagePendingDisconnect(_service, _object, _linkMessageDispatcher);
         if (!fromSignal)
           socket->disconnected.disconnectAsync(_linkDisconnected);
     }

@@ -97,9 +97,9 @@ namespace qi
   protected:
     qi::EventLoop* _eventLoop;
     Strand _signalsStrand; // Must be declared before the MessageDispatcher and the signals.
-    qi::MessageDispatcher _dispatcher;
 
   public:
+    qi::MessageDispatcher _dispatcher;
     // C4251
     qi::Signal<>                   connected;
     // C4251

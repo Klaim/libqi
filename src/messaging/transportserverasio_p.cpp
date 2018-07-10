@@ -86,6 +86,7 @@ namespace qi
     else
     {
         auto socket = boost::make_shared<qi::TcpMessageSocket<>>(*asIoServicePtr(context), _ssl, s);
+        socket->_dispatcher.setOwner(socket);
         qiLogDebug() << "New socket accepted: " << socket.get();
 
         self->newConnection(std::pair<MessageSocketPtr, Url>{

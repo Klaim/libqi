@@ -19,6 +19,7 @@
 
 #include "messagesocket.hpp"
 
+#include <ka/macroregular.hpp>
 
 namespace qi
 {
@@ -26,6 +27,9 @@ namespace qi
   class BoundObject;
   class StreamContext;
   using BoundAnyObject = boost::shared_ptr<BoundObject>;
+
+
+  bool dispatchToAnyBoundObject(const Message& message, MessageSocketPtr socket);
 
   class ObjectHost
   {

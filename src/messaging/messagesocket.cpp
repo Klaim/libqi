@@ -27,7 +27,9 @@ namespace qi
 
   MessageSocketPtr makeMessageSocket(const std::string &protocol, qi::EventLoop *eventLoop)
   {
-    return makeTcpMessageSocket(protocol, eventLoop);
+    MessageSocketPtr socket = makeTcpMessageSocket(protocol, eventLoop);
+    socket->_dispatcher.setOwner(socket);
+    return socket;
   }
 }
 
