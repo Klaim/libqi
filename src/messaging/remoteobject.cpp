@@ -78,8 +78,8 @@ namespace qi {
   {
     qiLogDebug() << "~RemoteObject " << this;
     //close may already have been called. (by Session_Service.close)
-    close("RemoteObject destroyed");
     destroy();
+    close("RemoteObject destroyed");
   }
 
   //### RemoteObject
