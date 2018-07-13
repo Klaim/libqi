@@ -218,7 +218,8 @@ namespace qi {
         qiLogDebug() << "Handling promise id:" << msg.id();
       } else  {
         qiLogError() << "no promise found for req id:" << msg.id()
-                     << "  obj: " << msg.service() << "  func: " << msg.function() << " type: " << Message::typeToString(msg.type());
+                     << "  service: " << msg.service()
+                     << "  object: " << msg.object() << "  func: " << msg.function() << " type: " << Message::typeToString(msg.type());
         return;
       }
     }

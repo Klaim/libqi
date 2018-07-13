@@ -706,16 +706,17 @@ TEST(SendObject, reuse_object_taken_from_connect)
   qi::AnyObject actuation = p.client()->service("Actuation");
 
   qi::Promise<bool> pinged;
-  actuation.connect("humanProperty",
-                    boost::function<void(qi::AnyObject)>([&](qi::AnyObject human)
+  auto ft = actuation.connect("humanProperty",
+                    boost::function<void(qi::AnyObject)>([=](qi::AnyObject human) mutable
   {
     auto homeMadeHuman = actuation.call<qi::AnyObject>("getHomeMadeHuman");
     human.call<void>("pingMe", homeMadeHuman);
     pinged.setValue(true);
   }));
+  auto scopedWait = ka::scoped([&]{ ft.wait(); });
   actuation.call<void>("emitHumanProperty");
 
-  ASSERT_EQ(qi::FutureState_FinishedWithValue, pinged.future().waitFor(qi::MilliSeconds(2000)));
+  EXPECT_EQ(qi::FutureState_FinishedWithValue, pinged.future().waitFor(qi::MilliSeconds(2000)));
 }
 
 // Check that we can connect to a property exposed on an object retrieved in a property callback
@@ -883,13 +884,15 @@ TEST(SendObject, give_and_take_object_signal)
   EXPECT_EQ(cookie, takenCookie);
   qi::Promise<bool> eaten;
   auto connecting =
-      takenCookie.connect("eaten", boost::function<void()>([&eaten]
+      takenCookie.connect("eaten", boost::function<void()>([eaten]() mutable
   {
     eaten.setValue(true);
   })).async();
   EXPECT_EQ(qi::FutureState_FinishedWithValue, connecting.waitFor(timeout));
 
   auto eating = takenCookie.async<bool>("eat");
+  auto scopedWaitEaten = ka::scoped([&] { eaten.future().wait(); });
+  auto scopedWaitEating = ka::scoped([&] { eating.wait(); });
   EXPECT_TRUE(eating.value(timeoutMs));
   EXPECT_TRUE(eaten.future().value(timeoutMs));
 }
@@ -1132,7 +1135,7 @@ TEST(SendObject, callProperties)
 
   qi::AnyObject s = sessions.client()->service("MyService");
 
-  int MAX = 1000;
+  int MAX = 100;
 
   qi::AnyObject myObject = boost::make_shared<MyObject>();
   s.call<void>("setObject", myObject);
@@ -1174,7 +1177,7 @@ TEST(SendObject, callPropertiesRemote)
 
   AnyObject s = client->service("MyService");  //store.call<AnyObject>("take");
 
-  int MAX = 10;
+  int MAX = 100;
 
   AnyObject myObject = boost::make_shared<MyObject>();
   s.call<void>("setObject", myObject);
