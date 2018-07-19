@@ -9,6 +9,7 @@
 
 #include <boost/thread/recursive_mutex.hpp>
 #include <boost/noncopyable.hpp>
+#include <boost/container/flat_map.hpp>
 #include "boundobject.hpp"
 #include "authprovider_p.hpp"
 
@@ -69,7 +70,7 @@ namespace qi {
 
   private:
     //bool: true if it's a socketobject
-    using BoundAnyObjectMap = std::map<unsigned int, BoundAnyObject>;
+    using BoundAnyObjectMap = boost::container::flat_map<unsigned int, BoundAnyObject>;
 
     //ObjectList
     BoundAnyObjectMap                   _boundObjects;
@@ -89,12 +90,18 @@ namespace qi {
       qi::SignalLink disconnected = qi::SignalBase::invalidSignalLink;
       qi::SignalLink messageReady = qi::SignalBase::invalidSignalLink;
     };
-    std::map<MessageSocketPtr, SocketSubscriber> _subscribers;
+    boost::container::flat_map<MessageSocketPtr, SocketSubscriber> _subscribers;
 
     boost::recursive_mutex              _socketsMutex;
 
     void connectMessageReady(const MessageSocketPtr& socket);
     void disconnectSignals(const MessageSocketPtr& socket, const SocketSubscriber& subscriber);
+
+    void registerAllServicesForMessageReception(const MessageSocketPtr&);
+    void unregisterAllServicesForMessageReception(const MessageSocketPtr&);
+    void unregisterAllServicesForMessageReception();
+    void registerServiceForAllSocketsMessageReception(BoundObject&, unsigned int);
+    void unregisterServiceForAllSocketsMessageReception(BoundObject&, unsigned int);
   };
 }
 

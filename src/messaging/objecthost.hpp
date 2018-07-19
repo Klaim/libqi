@@ -26,10 +26,8 @@ namespace qi
   class Message;
   class BoundObject;
   class StreamContext;
+  class RemoteObject;
   using BoundAnyObject = boost::shared_ptr<BoundObject>;
-
-
-  bool dispatchToAnyBoundObject(const Message& message, MessageSocketPtr socket);
 
   class ObjectHost
   {
@@ -58,6 +56,41 @@ namespace qi
     ObjectMap       _objectMap;
     RemoteReferencesMap _remoteReferences;
   };
+
+
+  struct BoundObjectAddress
+  {
+    StreamContext* serializationContext = nullptr;
+    unsigned int service = 0;
+    unsigned int object = 0;
+
+    BoundObjectAddress() = default;
+    BoundObjectAddress(StreamContext* serializationContext, unsigned int service, unsigned int object)
+      : serializationContext(serializationContext), object(object), service(service)
+    {}
+
+    KA_GENERATE_FRIEND_REGULAR_OP_EQUAL_AND_OP_LESS_3(BoundObjectAddress, serializationContext, service, object);
+
+    friend std::size_t hash_value(const BoundObjectAddress& address)
+    {
+      std::size_t seed = 0;
+      boost::hash_combine(seed, address.serializationContext);
+      boost::hash_combine(seed, address.service);
+      boost::hash_combine(seed, address.object);
+      return seed;
+    }
+
+  };
+
+
+  void addToGlobalIndex(BoundObjectAddress address, BoundObject& object);
+  void addToGlobalIndex(BoundObjectAddress address, RemoteObject& object);
+  void removeFromGlobalIndex(BoundObject& object);
+  void removeFromGlobalIndex(RemoteObject& object);
+  void removeFromGlobalIndex(BoundObjectAddress address);
+  bool dispatchToAnyBoundObject(const Message& message, MessageSocketPtr socket);
+
+
 }
 
 #endif  // _SRC_OBJECTHOST_HPP_

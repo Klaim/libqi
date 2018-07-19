@@ -9,6 +9,7 @@
 
 #include <qi/actor.hpp>
 #include "objecthost.hpp"
+#include "remoteobject_p.hpp"
 
 #include "boundobject.hpp"
 #include <ka/typetraits.hpp>
@@ -17,65 +18,47 @@ qiLogCategory("qimessaging.objecthost");
 
 namespace qi
 {
-
   namespace {
-    using MaybeBoundObject = boost::weak_ptr<BoundObject>;
 
+    using EitherBoundOrRemoteObject = boost::variant<BoundObject*, RemoteObject*>;
 
-    struct BoundObjectAddress
+    void passMessage(const Message& message, BoundObject& object, MessageSocketPtr socket)
     {
-      unsigned int service = 0;
-      unsigned int object = 0;
-      StreamContext* serializationContext = nullptr;
+      object.onMessage(message, socket);
+    }
 
-      BoundObjectAddress() = default;
-      BoundObjectAddress(unsigned int service, unsigned int object, StreamContext* serializationContext)
-        : object(object), service(service), serializationContext(serializationContext)
-      {}
+    void passMessage(const Message& message, RemoteObject& object, MessageSocketPtr)
+    {
+      object.onMessagePending(message);
+    }
 
-      KA_GENERATE_FRIEND_REGULAR_OP_EQUAL_AND_OP_LESS_3(BoundObjectAddress, service, object, serializationContext);
 
-      friend std::size_t hash_value(const BoundObjectAddress& address)
-      {
-        std::size_t seed = 0;
-        boost::hash_combine(seed, address.service);
-        boost::hash_combine(seed, address.object);
-        boost::hash_combine(seed, address.serializationContext);
-        return seed;
-      }
-
-    };
-
-     class BoundObjectIndex
-     {
-      using Index = std::unordered_map<BoundObjectAddress, MaybeBoundObject, boost::hash<BoundObjectAddress>>;
+    class BoundObjectIndex
+    {
+      using Index = std::unordered_map<BoundObjectAddress, EitherBoundOrRemoteObject, boost::hash<BoundObjectAddress>>;
       using ThreadSafeIndex = boost::synchronized_value<Index>;
 
       ThreadSafeIndex _index;
 
     public:
 
-      void add(BoundObjectAddress address, MaybeBoundObject object)
+      void add(BoundObjectAddress address, EitherBoundOrRemoteObject object)
       {
-        auto result = _index->emplace(address, object);
+        auto result = _index->emplace(std::move(address), std::move(object));
         QI_ASSERT_TRUE(result.second); // There is more than one object with the same socket.service.id, we did something wrong.
       }
 
-      BoundAnyObject find(BoundObjectAddress address)
+      boost::optional<EitherBoundOrRemoteObject> find(BoundObjectAddress address)
       {
-        BoundAnyObject foundObject;
 
         auto index = _index.synchronize();
         auto find_it = index->find(address);
         if (find_it != end(*index))
         {
-          foundObject = find_it->second.lock();
-
-          if (!foundObject)
-            index->erase(find_it);
+          return find_it->second;
         }
 
-        return foundObject;
+        return {};
       }
 
       void remove(BoundObjectAddress address)
@@ -83,23 +66,30 @@ namespace qi
         _index->erase(address);
       }
 
-      void remove(BoundObject& object)
+      void remove(RemoteObject& object){ return removeImpl(&object); }
+      void remove(BoundObject& object) { return removeImpl(&object); }
+
+
+    private:
+      template<class T>
+      void removeImpl(T* object)
       {
+        QI_ASSERT(object);
+
         auto index = _index.synchronize();
         for (auto it = index->begin(); it != end(*index); )
         {
-          auto recorededObject = it->second.lock();
-
-          if (!recorededObject
-            || recorededObject.get() == &object)
+          if (typeid(T*) == it->second.type())
           {
-            it = index->erase(it);
-          }
-          else
-          {
-            ++it;
+            auto* recordedObject = boost::get<T*>(it->second);
+            if (object == recordedObject)
+            {
+              it = index->erase(it);
+              continue;
+            }
           }
 
+          ++it;
         }
       }
 
@@ -110,17 +100,45 @@ namespace qi
 
   }
 
-  bool dispatchToAnyBoundObject(const Message& message, MessageSocketPtr socket)
+  void addToGlobalIndex(BoundObjectAddress address, BoundObject& object)
   {
-    auto foundObject = allBoundObjectsIndex.find({message.service(), message.object(), socket.get()});
-    if (foundObject)
-    {
-      foundObject->onMessage(message, socket);
-      return true;
-    }
-    return false;
+    allBoundObjectsIndex.add(address, &object);
   }
 
+  void addToGlobalIndex(BoundObjectAddress address, RemoteObject& object)
+  {
+    allBoundObjectsIndex.add(address, &object);
+  }
+
+  void removeFromGlobalIndex(RemoteObject& object)
+  {
+    allBoundObjectsIndex.remove(object);
+  }
+
+  void removeFromGlobalIndex(BoundObject& object)
+  {
+    allBoundObjectsIndex.remove(object);
+  }
+
+  void removeFromGlobalIndex(BoundObjectAddress address)
+  {
+    allBoundObjectsIndex.remove(address);
+  }
+
+  bool dispatchToAnyBoundObject(const Message& message, MessageSocketPtr socket)
+  {
+
+    auto foundObject = allBoundObjectsIndex.find({ socket.get(), message.service(), message.object()});
+    if (foundObject)
+    {
+      boost::apply_visitor([&](auto&& object) {
+        passMessage(message, *object, socket);
+      }, *foundObject);
+      return true;
+    }
+    else
+      return false;
+  }
 
   BoundObject::~BoundObject()
   {
@@ -130,7 +148,8 @@ namespace qi
 
 ObjectHost::ObjectHost(unsigned int service)
  : _service(service)
- {}
+ {
+ }
 
  ObjectHost::~ObjectHost()
  {
@@ -206,7 +225,7 @@ unsigned int ObjectHost::addObject(BoundAnyObject obj, StreamContext* remoteRef,
   QI_ASSERT(_objectMap.find(id) == _objectMap.end());
   _objectMap[id] = obj;
   _remoteReferences[remoteRef].push_back(id);
-  allBoundObjectsIndex.add({ _service, id, remoteRef}, obj);
+  allBoundObjectsIndex.add({ remoteRef, _service, id}, obj.get());
   return id;
 }
 

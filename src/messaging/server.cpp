@@ -12,6 +12,7 @@
 #include <exception>
 #include "servicedirectoryclient.hpp"
 #include "authprovider_p.hpp"
+#include "remoteobject_p.hpp"
 
 qiLogCategory("qimessaging.server");
 
@@ -32,6 +33,59 @@ namespace qi {
   {
     destroy();
     close();
+  }
+
+  void Server::registerAllServicesForMessageReception(const MessageSocketPtr& socket)
+  {
+    boost::mutex::scoped_lock lock(_boundObjectsMutex);
+    for (auto&& boundObjectSlot : _boundObjects)
+    {
+      BoundObject& object = *boundObjectSlot.second;
+      auto serviceId = boundObjectSlot.first;
+      // All services have the same object id
+      addToGlobalIndex({ socket.get(), serviceId, qi::Message::GenericObject::GenericObject_Main }, object);
+    }
+  }
+
+  void Server::unregisterAllServicesForMessageReception(const MessageSocketPtr& socket)
+  {
+    boost::mutex::scoped_lock lock(_boundObjectsMutex);
+    for (auto&& boundObjectSlot : _boundObjects)
+    {
+      auto serviceId = boundObjectSlot.first;
+      // All services have the same object id
+      removeFromGlobalIndex({ socket.get(), serviceId, qi::Message::GenericObject::GenericObject_Main });
+    }
+  }
+
+  void Server::registerServiceForAllSocketsMessageReception(BoundObject& object, unsigned int serviceId)
+  {
+    boost::recursive_mutex::scoped_lock lock(_socketsMutex);
+    for (auto&& socketSubscribersSlot : _subscribers)
+    {
+      auto&& socket = socketSubscribersSlot.first;
+      addToGlobalIndex({ socket.get(), serviceId, qi::Message::GenericObject::GenericObject_Main }, object);
+    }
+  }
+
+  void Server::unregisterServiceForAllSocketsMessageReception(BoundObject& object, unsigned int serviceId)
+  {
+    boost::recursive_mutex::scoped_lock lock(_socketsMutex);
+    for (auto&& socketSubscribersSlot : _subscribers)
+    {
+      auto&& socket = socketSubscribersSlot.first;
+      removeFromGlobalIndex({ socket.get(), serviceId, qi::Message::GenericObject::GenericObject_Main });
+    }
+  }
+
+  void Server::unregisterAllServicesForMessageReception()
+  {
+    boost::mutex::scoped_lock lock(_boundObjectsMutex);
+    for (auto&& boundObjectSlot : _boundObjects)
+    {
+      BoundObject& object = *boundObjectSlot.second;
+      removeFromGlobalIndex(object);
+    }
   }
 
   bool Server::addObject(unsigned int id, qi::AnyObject obj)
@@ -55,6 +109,7 @@ namespace qi {
         return false;
       }
       _boundObjects[id] = obj;
+      registerServiceForAllSocketsMessageReception(*obj, id);
       return true;
     }
   }
@@ -72,6 +127,7 @@ namespace qi {
       }
       removedObject = it->second;
       _boundObjects.erase(idx);
+      unregisterServiceForAllSocketsMessageReception(*removedObject, idx);
     }
     removedObject.reset();
     return true;
@@ -101,6 +157,8 @@ namespace qi {
 
     QI_ASSERT(subscriber.messageReady == qi::SignalBase::invalidSignalLink &&
            "Connecting a signal that already exists.");
+
+    registerAllServicesForMessageReception(socket);
 
     subscriber.messageReady = socket->messageReady.connect(
         track([=](const Message& msg) { onMessageReady(msg, socket); }, this));
@@ -297,36 +355,47 @@ namespace qi {
 
 
   void Server::onMessageReady(const qi::Message &msg, MessageSocketPtr socket) {
-    qi::BoundAnyObject obj;
+    //qi::BoundAnyObject obj;
+    //{
+    //  boost::mutex::scoped_lock sl(_boundObjectsMutex);
+    //  BoundAnyObjectMap::iterator it;
+
+    //  it = _boundObjects.find(msg.service());
+    //  if (it == _boundObjects.end())
+    //  {
+    //    // The message could be addressed to a bound object, inside a
+    //    // remoteobject host, or to a remoteobject, using the same socket.
+    //    qiLogVerbose() << "No service for " << msg.address();
+    //    if (msg.object() > Message::GenericObject_Main
+    //        || msg.type() == Message::Type_Reply
+    //        || msg.type() == Message::Type_Event
+    //        || msg.type() == Message::Type_Error
+    //        || msg.type() == Message::Type_Canceled)
+    //      return;
+    //    // ... but only if the object id is >main
+    //    qi::Message       retval(Message::Type_Error, msg.address());
+    //    std::stringstream ss;
+    //    ss << "can't find service, address: " << msg.address();
+    //    retval.setError(ss.str());
+    //    socket->send(retval);
+    //    qiLogError() << "Can't find service: " << msg.service() << " on " << msg.address();
+    //    return;
+    //  }
+    //  obj            = it->second;
+    //}
+
+    //obj->onMessage(msg, socket);
+
+    /*if (!dispatchToAnyBoundObject(msg, socket))
     {
-      boost::mutex::scoped_lock sl(_boundObjectsMutex);
-      BoundAnyObjectMap::iterator it;
+      qi::Message retval(Message::Type_Error, msg.address());
+      std::stringstream ss;
+      ss << "can't find service, address: " << msg.address();
+      retval.setError(ss.str());
+      socket->send(retval);
+      qiLogError() << "Can't find service: " << msg.service() << " on " << msg.address();
 
-      it = _boundObjects.find(msg.service());
-      if (it == _boundObjects.end())
-      {
-        // The message could be addressed to a bound object, inside a
-        // remoteobject host, or to a remoteobject, using the same socket.
-        qiLogVerbose() << "No service for " << msg.address();
-        if (msg.object() > Message::GenericObject_Main
-            || msg.type() == Message::Type_Reply
-            || msg.type() == Message::Type_Event
-            || msg.type() == Message::Type_Error
-            || msg.type() == Message::Type_Canceled)
-          return;
-        // ... but only if the object id is >main
-        qi::Message       retval(Message::Type_Error, msg.address());
-        std::stringstream ss;
-        ss << "can't find service, address: " << msg.address();
-        retval.setError(ss.str());
-        socket->send(retval);
-        qiLogError() << "Can't find service: " << msg.service() << " on " << msg.address();
-        return;
-      }
-      obj            = it->second;
-    }
-
-    obj->onMessage(msg, socket);
+    }*/
   }
 
   void Server::disconnectSignals(const MessageSocketPtr& socket, const SocketSubscriber& subscriber)

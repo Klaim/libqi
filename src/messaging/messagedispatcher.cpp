@@ -61,22 +61,22 @@ namespace qi {
       }
 
 
-      boost::shared_ptr<OnMessageSignal> sig;
-      bool hit = false;
-      {
-        boost::recursive_mutex::scoped_lock sl(_signalMapMutex);
-        SignalMap::iterator it;
-        it = _signalMap.find(Target(msg.service(), msg.object()));
-        if (it != _signalMap.end())
-        {
-          hit = true;
-          sig = it->second;
-        }
-      }
-      if (sig)
-        (*sig)(msg);
-      if (!hit) // FIXME: that should probably never happen, raise log level
-        qiLogDebug() << "No listener for service " << msg.service();
+      //boost::shared_ptr<OnMessageSignal> sig;
+      //bool hit = false;
+      //{
+      //  boost::recursive_mutex::scoped_lock sl(_signalMapMutex);
+      //  SignalMap::iterator it;
+      //  it = _signalMap.find(Target(msg.service(), msg.object()));
+      //  if (it != _signalMap.end())
+      //  {
+      //    hit = true;
+      //    sig = it->second;
+      //  }
+      //}
+      //if (sig)
+      //  (*sig)(msg);
+      //if (!hit) // FIXME: that should probably never happen, raise log level
+      //  qiLogDebug() << "No listener for service " << msg.service();
     }
   }
 

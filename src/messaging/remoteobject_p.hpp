@@ -56,9 +56,9 @@ namespace qi {
     unsigned int service() const { return _service; }
     unsigned int object() const { return _object; }
 
-  protected:
     //TransportSocket.messagePending
     void onMessagePending(const qi::Message &msg);
+  protected:
     //TransportSocket.disconnected
     void onSocketDisconnected(std::string error);
 

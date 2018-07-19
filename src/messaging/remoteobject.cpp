@@ -20,7 +20,6 @@ qiLogCategory("qimessaging.remoteobject");
 
 namespace qi {
 
-
   static qi::MetaObject* createRemoteObjectSpecialMetaObject() {
     qi::MetaObject *mo = new qi::MetaObject;
     qi::MetaObjectBuilder mob;
@@ -80,9 +79,8 @@ namespace qi {
     //close may already have been called. (by Session_Service.close)
     destroy();
     close("RemoteObject destroyed");
+    removeFromGlobalIndex(*this);
   }
-
-  //### RemoteObject
 
   void RemoteObject::setTransportSocket(qi::MessageSocketPtr socket) {
     MessageSocketPtr sock = *_socket;
@@ -93,13 +91,18 @@ namespace qi {
     }
     auto syncSocket = _socket.synchronize();
     *syncSocket = socket;
+
+    removeFromGlobalIndex(*this);
+
     //do not set the socket on the remote object
     if (socket) {
       qiLogDebug() << "Adding connection to socket" << (void*)socket.get();
 
-      _linkMessageDispatcher = socket->messagePendingConnect(_service,
+      addToGlobalIndex({ socket.get(), _service, _object }, *this);
+
+      /*_linkMessageDispatcher = socket->messagePendingConnect(_service,
         _object,
-        track(boost::bind<void>(&RemoteObject::onMessagePending, this, _1), this));
+        track(boost::bind<void>(&RemoteObject::onMessagePending, this, _1), this));*/
       _linkDisconnected = socket->disconnected.connect(
           track([=](const std::string& reason) { onSocketDisconnected(reason); }, this));
     }
@@ -141,19 +144,19 @@ namespace qi {
     MessageSocketPtr sock = *_socket;
     qiLogDebug() << this << "(" << _service << '/' << _object << ") msg " << msg.address() << " " << msg.buffer().size();
 
-    auto passToHost = [&]{
-      qiLogDebug() << "Passing message " << msg.address() << " to host ";
-      if (sock)
-      {
-        ObjectHost::dispatchToChildren(msg, sock);
-      }
-    };
+    //auto passToHost = [&]{
+    //  qiLogDebug() << "Passing message " << msg.address() << " to host ";
+    //  if (sock)
+    //  {
+    //    ObjectHost::dispatchToChildren(msg, sock);
+    //  }
+    //};
 
     if (msg.object() != _object)
     {
       if (!dispatchToAnyBoundObject(msg, sock))
       {
-        passToHost();
+      //  passToHost();
       }
       qiLogError() << "Remote Object " << _object << " received message which is not destined to it: " << msg;
       return;
@@ -205,7 +208,7 @@ namespace qi {
       && msg.type() != qi::Message::Type_Canceled) {
       qiLogError() << "Message " << msg.address() << " type not handled: " << msg.type();
 
-      passToHost();
+      //passToHost();
       return;
     }
 
@@ -574,7 +577,8 @@ namespace qi {
     if (socket)
     { // Do not hold any lock when invoking signals.
         qiLogDebug() << "Removing connection from socket " << (void*)socket.get();
-        socket->messagePendingDisconnect(_service, _object, _linkMessageDispatcher);
+        /*socket->messagePendingDisconnect(_service, _object, _linkMessageDispatcher);*/
+        removeFromGlobalIndex(*this);
         if (!fromSignal)
           socket->disconnected.disconnectAsync(_linkDisconnected);
     }

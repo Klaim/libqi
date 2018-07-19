@@ -229,6 +229,12 @@ namespace qi {
 
   void ServiceBoundObject::onMessage(const qi::Message &msg, MessageSocketPtr socket) {
     boost::mutex::scoped_lock lock(_callMutex);
+    if (_lastMessageId == msg.id())
+    {
+      qiLogDebug() << "WWWTTTTTFFFFF ";
+      return;
+    }
+    _lastMessageId = msg.id();
     try {
       if (msg.version() > Message::Header::currentVersion())
       {
@@ -244,11 +250,11 @@ namespace qi {
 
       if (msg.object() > _objectId)
       {
-        qiLogDebug() << "Passing message to children";
+       /* qiLogDebug() << "Passing message to children";
         if(!dispatchToAnyBoundObject(msg, socket))
         {
           ObjectHost::dispatchToChildren(msg, socket);
-        }
+        }*/
         return;
       }
 

@@ -161,6 +161,7 @@ namespace qi {
     qi::AnyObject          _object;
     qi::AnyObject          _self;
     qi::MetaCallType       _callType;
+    unsigned int           _lastMessageId = -1;
     boost::optional<boost::weak_ptr<qi::ObjectHost>> _owner;
     // prevents parallel onMessage on self execution and protects the current socket
     mutable boost::recursive_mutex           _mutex;
