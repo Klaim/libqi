@@ -271,6 +271,7 @@ namespace qi {
     _serverObject.open();
     qi::Promise<void> p;
     //will listen and connect
+    _sdClient.close();
     qi::Future<void> f = _sd.listenStandalone(addresses);
     f.connect(&SessionPrivate::listenStandaloneCont, this, p, _1);
     return p.future();

@@ -1125,7 +1125,7 @@ struct MyObject {
 
 QI_REGISTER_OBJECT(MyObject, foo)
 
-TEST(SendObject, callProperties)
+TEST(SendObject, callProperties) // TODO: change this name
 {
   TestSessionPair sessions;
 
@@ -1154,12 +1154,12 @@ TEST(SendObject, callProperties)
   objectList.clear();
   s.call<void>("setObject", myObject);
   s.call<void>("test");
-
+  // TODO: add a check that the call time was in the same order of magnitude
   // we can see in the logs that getting in the property takes more and more time
 }
 
 
-TEST(SendObject, callPropertiesRemote)
+TEST(SendObject, callPropertiesRemote) // TODO: change this name
 {
   using namespace qi;
 
@@ -1170,12 +1170,9 @@ TEST(SendObject, callPropertiesRemote)
 
   auto client = makeSession();
   client->connect(serviceUrl);
-  //AnyObject store = client->service("PingPongService");
-
-  //store.call<void>("give", boost::make_shared<MyService>());
 
 
-  AnyObject s = client->service("MyService");  //store.call<AnyObject>("take");
+  AnyObject s = client->service("MyService");
 
   int MAX = 100;
 
@@ -1196,6 +1193,6 @@ TEST(SendObject, callPropertiesRemote)
   objectList.clear();
   s.call<void>("setObject", myObject);
   s.call<void>("test");
-
+  // TODO: add a check that the call time was in the same order of magnitude
   // we can see in the logs that getting in the property takes more and more time
 }

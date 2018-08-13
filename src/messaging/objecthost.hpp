@@ -28,6 +28,8 @@ namespace qi
   class StreamContext;
   class RemoteObject;
   using BoundAnyObject = boost::shared_ptr<BoundObject>;
+  using RemoteObjectPtr = boost::shared_ptr<RemoteObject>;
+
 
   class ObjectHost
   {
@@ -83,11 +85,12 @@ namespace qi
   };
 
 
-  void addToGlobalIndex(BoundObjectAddress address, BoundObject& object);
-  void addToGlobalIndex(BoundObjectAddress address, RemoteObject& object);
+  void addToGlobalIndex(BoundObjectAddress address, BoundAnyObject object);
+  void addToGlobalIndex(BoundObjectAddress address, RemoteObjectPtr object);
   void removeFromGlobalIndex(BoundObject& object);
   void removeFromGlobalIndex(RemoteObject& object);
-  void removeFromGlobalIndex(BoundObjectAddress address);
+  void removeFromGlobalIndex(BoundObjectAddress address, BoundObject& object);
+  void removeFromGlobalIndex(BoundObjectAddress address, RemoteObject& object);
   bool dispatchToAnyBoundObject(const Message& message, MessageSocketPtr socket);
 
 

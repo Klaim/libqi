@@ -4,8 +4,10 @@
 */
 
 #include <unordered_map>
+#include <algorithm>
 #include <boost/thread/synchronized_value.hpp>
 #include <boost/functional/hash.hpp>
+#include <boost/container/flat_set.hpp>
 
 #include <qi/actor.hpp>
 #include "objecthost.hpp"
@@ -13,6 +15,7 @@
 
 #include "boundobject.hpp"
 #include <ka/typetraits.hpp>
+#include <ka/algorithm.hpp>
 
 qiLogCategory("qimessaging.objecthost");
 
@@ -20,7 +23,12 @@ namespace qi
 {
   namespace {
 
-    using EitherBoundOrRemoteObject = boost::variant<BoundObject*, RemoteObject*>;
+    template<class T>
+    using MaybeObject = boost::weak_ptr<T>;
+    using MaybeBoundObject = MaybeObject<BoundObject>;
+    using MaybeRemoteObject = MaybeObject<RemoteObject>;
+    using EitherBoundOrRemoteObject = boost::variant<MaybeBoundObject, MaybeRemoteObject>;
+    using ObjectSet = boost::container::flat_set<EitherBoundOrRemoteObject>;
 
     void passMessage(const Message& message, BoundObject& object, MessageSocketPtr socket)
     {
@@ -35,62 +43,169 @@ namespace qi
 
     class BoundObjectIndex
     {
-      using Index = std::unordered_map<BoundObjectAddress, EitherBoundOrRemoteObject, boost::hash<BoundObjectAddress>>;
+      using Index = std::unordered_map<BoundObjectAddress, ObjectSet, boost::hash<BoundObjectAddress>>;
       using ThreadSafeIndex = boost::synchronized_value<Index>;
 
       ThreadSafeIndex _index;
+
+      struct IsAlive
+      {
+        template<class T>
+        bool operator()(T&& maybeObject) const {
+          return !maybeObject.expired(); // not sure if it's safe to do it that way
+        }
+      };
+
+      struct IsSame
+      {
+        EitherBoundOrRemoteObject* object;
+        template<class T>
+        bool operator()(T&& maybeObject) const {
+          return boost::get<T>(*object).lock() == boost::get<T>(maybeObject).lock();
+        }
+      };
 
     public:
 
       void add(BoundObjectAddress address, EitherBoundOrRemoteObject object)
       {
-        auto result = _index->emplace(std::move(address), std::move(object));
-        QI_ASSERT_TRUE(result.second); // There is more than one object with the same socket.service.id, we did something wrong.
+        QI_ASSERT_FALSE(object.empty());
+        auto index = _index.synchronize();
+        auto& objects = (*index)[address];
+        objects.reserve(2);
+        auto result = objects.insert(std::move(object)); // We do not move object in because we might need it if the next test fails.
+        //if (!result.second) // there is something already stored, we need to erase it if it's dead and store the new one
+        //{
+        //  QI_ASSERT_FALSE(result.first->second.empty());
+        //  const bool storedObjectIsAlive =  boost::apply_visitor(IsAlive{}, result.first->second);
+        //  if (storedObjectIsAlive)
+        //  {
+        //    if (object.which() == result.first->second.which()
+        //      && boost::apply_visitor(IsSame{ &object }, result.first->second))
+        //    {
+        //      return; // It's the same object.
+        //    }
+        //  }
+        //  QI_ASSERT_FALSE(storedObjectIsAlive); // There is more than one object with the same socket.service.id, we did something wrong.
+        //  result.first->second = object;
+        //}
       }
 
-      boost::optional<EitherBoundOrRemoteObject> find(BoundObjectAddress address)
+      boost::optional<ObjectSet> find(BoundObjectAddress address)
       {
-
         auto index = _index.synchronize();
-        auto find_it = index->find(address);
-        if (find_it != end(*index))
+        auto objectsIt = findImpl(*index, address);
+        if (objectsIt != end(*index))
         {
-          return find_it->second;
+          return objectsIt->second;
         }
-
         return {};
       }
-
+/*
       void remove(BoundObjectAddress address)
       {
         _index->erase(address);
+      }*/
+
+      void remove(BoundObjectAddress address, RemoteObject& object)
+      {
+        return removeImpl(*_index, address, &object);
       }
 
-      void remove(RemoteObject& object){ return removeImpl(&object); }
-      void remove(BoundObject& object) { return removeImpl(&object); }
+      void remove(BoundObjectAddress address, BoundObject& object)
+      {
+        return removeImpl(*_index, address, &object);
+      }
+
+      void remove(RemoteObject& object)
+      {
+        return removeImpl(*_index, &object);
+      }
+
+      void remove(BoundObject& object)
+      {
+        return removeImpl(*_index, &object);
+      }
 
 
     private:
-      template<class T>
-      void removeImpl(T* object)
-      {
-        QI_ASSERT(object);
 
-        auto index = _index.synchronize();
-        for (auto it = index->begin(); it != end(*index); )
+      static Index::iterator findImpl(Index& index, BoundObjectAddress address)
+      {
+        auto find_it = index.find(address);
+        if (find_it != end(index))
         {
-          if (typeid(T*) == it->second.type())
+          auto& objects = find_it->second;
+
+          ka::erase_if(objects, [&](EitherBoundOrRemoteObject& maybeObject) {
+            return maybeObject.empty() || !boost::apply_visitor(IsAlive{}, maybeObject);
+          });
+
+          if (objects.empty())
           {
-            auto* recordedObject = boost::get<T*>(it->second);
-            if (object == recordedObject)
+            index.erase(find_it);
+            return end(index);
+          }
+
+          return find_it;
+        }
+
+        return end(index);
+      }
+
+      template<class T>
+      static void eraseDeadOrTargettedObject(ObjectSet& objects, T* object) // TODO: should be a struct
+      {
+        ka::erase_if(objects, [&](EitherBoundOrRemoteObject& maybeObject) {
+
+          if (maybeObject.empty())
+            return true;
+
+          if (typeid(MaybeObject<T>) == maybeObject.type())
+          {
+            auto maybeRecordedObject = boost::get<MaybeObject<T>>(maybeObject);
+            auto recordedObject = maybeRecordedObject.lock(); // TODO: find a way to make it less expensive
+            if (!recordedObject || object == recordedObject.get())
             {
-              it = index->erase(it);
-              continue;
+              return true;
             }
           }
 
+          return false;
+        });
+      }
+
+      template<class T>
+      static void removeImpl(Index& index, BoundObjectAddress address, T* object)
+      {
+        auto objectsIt = findImpl(index, address);
+        if (objectsIt != end(index))
+        {
+          auto& objects = objectsIt->second;
+          eraseDeadOrTargettedObject(objects, object);
+          if (objects.empty())
+            index.erase(objectsIt);
+        }
+      }
+
+      template<class T>
+      static void removeImpl(Index& index, T* object)
+      {
+        QI_ASSERT(object);
+
+        for (auto it = begin(index); it != end(index); )
+        {
+          auto& objects = it->second;
+          eraseDeadOrTargettedObject(objects, object);
+
+          if(objects.empty())
+          {
+            it = index.erase(it);
+            continue;
+          }
           ++it;
         }
+
       }
 
 
@@ -100,14 +215,20 @@ namespace qi
 
   }
 
-  void addToGlobalIndex(BoundObjectAddress address, BoundObject& object)
+  void addToGlobalIndex(BoundObjectAddress address, BoundAnyObject object)
   {
-    allBoundObjectsIndex.add(address, &object);
+    QI_ASSERT_TRUE(object);
+    MaybeBoundObject maybeObject = object;
+    object.reset();
+    allBoundObjectsIndex.add(address, maybeObject);
   }
 
-  void addToGlobalIndex(BoundObjectAddress address, RemoteObject& object)
+  void addToGlobalIndex(BoundObjectAddress address, RemoteObjectPtr object)
   {
-    allBoundObjectsIndex.add(address, &object);
+    QI_ASSERT_TRUE(object);
+    RemoteObjectPtr maybeObject = object;
+    object.reset();
+    allBoundObjectsIndex.add(address, maybeObject);
   }
 
   void removeFromGlobalIndex(RemoteObject& object)
@@ -120,21 +241,49 @@ namespace qi
     allBoundObjectsIndex.remove(object);
   }
 
-  void removeFromGlobalIndex(BoundObjectAddress address)
+  void removeFromGlobalIndex(BoundObjectAddress address, BoundObject& object)
   {
-    allBoundObjectsIndex.remove(address);
+    allBoundObjectsIndex.remove(address, object);
+  }
+
+  void removeFromGlobalIndex(BoundObjectAddress address, RemoteObject& object)
+  {
+    allBoundObjectsIndex.remove(address, object);
+  }
+
+  namespace {
+    struct PassMessageIfObjectAlive
+    {
+      const Message& message;
+      const MessageSocketPtr& socket;
+
+      template<class T>
+      bool operator()(T&& maybeObject) const {
+        if (auto object = maybeObject.lock())
+        {
+          passMessage(message, *object, socket);
+          return true;
+        }
+        else
+        {
+          return false;
+        }
+      }
+    };
   }
 
   bool dispatchToAnyBoundObject(const Message& message, MessageSocketPtr socket)
   {
-
-    auto foundObject = allBoundObjectsIndex.find({ socket.get(), message.service(), message.object()});
-    if (foundObject)
+    const BoundObjectAddress address{ socket.get(), message.service(), message.object() };
+    auto foundObjects = allBoundObjectsIndex.find(address);
+    if (foundObjects)
     {
-      boost::apply_visitor([&](auto&& object) {
-        passMessage(message, *object, socket);
-      }, *foundObject);
-      return true;
+      bool dispatched = false;
+      for (auto& maybeObject : *foundObjects)
+      {
+        dispatched = dispatched || boost::apply_visitor(PassMessageIfObjectAlive{message, socket}, maybeObject);
+      }
+      return dispatched;
     }
     else
       return false;
@@ -225,7 +374,7 @@ unsigned int ObjectHost::addObject(BoundAnyObject obj, StreamContext* remoteRef,
   QI_ASSERT(_objectMap.find(id) == _objectMap.end());
   _objectMap[id] = obj;
   _remoteReferences[remoteRef].push_back(id);
-  allBoundObjectsIndex.add({ remoteRef, _service, id}, obj.get());
+  allBoundObjectsIndex.add({ remoteRef, _service, id}, obj);
   return id;
 }
 

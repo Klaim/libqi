@@ -98,7 +98,7 @@ namespace qi {
     if (socket) {
       qiLogDebug() << "Adding connection to socket" << (void*)socket.get();
 
-      addToGlobalIndex({ socket.get(), _service, _object }, *this);
+      addToGlobalIndex({ socket.get(), _service, _object }, weakPtr().lock());
 
       /*_linkMessageDispatcher = socket->messagePendingConnect(_service,
         _object,

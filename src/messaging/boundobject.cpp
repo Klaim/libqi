@@ -228,13 +228,14 @@ namespace qi {
   }
 
   void ServiceBoundObject::onMessage(const qi::Message &msg, MessageSocketPtr socket) {
-    boost::mutex::scoped_lock lock(_callMutex);
+    decltype(_callMutex)::scoped_lock lock(_callMutex);
     if (_lastMessageId == msg.id())
     {
       qiLogDebug() << "WWWTTTTTFFFFF ";
       return;
     }
     _lastMessageId = msg.id();
+
     try {
       if (msg.version() > Message::Header::currentVersion())
       {
@@ -250,8 +251,8 @@ namespace qi {
 
       if (msg.object() > _objectId)
       {
-       /* qiLogDebug() << "Passing message to children";
-        if(!dispatchToAnyBoundObject(msg, socket))
+        /*qiLogDebug() << "Passing message to children";
+        if(!dispatchToAnyBoundObject(socket->_dispatcher.notificationExecutor(), msg, socket))
         {
           ObjectHost::dispatchToChildren(msg, socket);
         }*/
@@ -761,5 +762,6 @@ namespace qi {
 
 // id 1 is for the service itself, we must not use it for sub-objects
 qi::Atomic<unsigned int> ServiceBoundObject::_nextId(2);
+
 
 }

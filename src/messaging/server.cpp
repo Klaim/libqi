@@ -40,7 +40,7 @@ namespace qi {
     boost::mutex::scoped_lock lock(_boundObjectsMutex);
     for (auto&& boundObjectSlot : _boundObjects)
     {
-      BoundObject& object = *boundObjectSlot.second;
+      auto& object = boundObjectSlot.second;
       auto serviceId = boundObjectSlot.first;
       // All services have the same object id
       addToGlobalIndex({ socket.get(), serviceId, qi::Message::GenericObject::GenericObject_Main }, object);
@@ -52,13 +52,14 @@ namespace qi {
     boost::mutex::scoped_lock lock(_boundObjectsMutex);
     for (auto&& boundObjectSlot : _boundObjects)
     {
+      auto& object = boundObjectSlot.second;
       auto serviceId = boundObjectSlot.first;
       // All services have the same object id
-      removeFromGlobalIndex({ socket.get(), serviceId, qi::Message::GenericObject::GenericObject_Main });
+      removeFromGlobalIndex({ socket.get(), serviceId, qi::Message::GenericObject::GenericObject_Main }, *object);
     }
   }
 
-  void Server::registerServiceForAllSocketsMessageReception(BoundObject& object, unsigned int serviceId)
+  void Server::registerServiceForAllSocketsMessageReception(BoundAnyObject& object, unsigned int serviceId)
   {
     boost::recursive_mutex::scoped_lock lock(_socketsMutex);
     for (auto&& socketSubscribersSlot : _subscribers)
@@ -68,13 +69,13 @@ namespace qi {
     }
   }
 
-  void Server::unregisterServiceForAllSocketsMessageReception(BoundObject& object, unsigned int serviceId)
+  void Server::unregisterServiceForAllSocketsMessageReception(unsigned int serviceId, BoundObject& object)
   {
     boost::recursive_mutex::scoped_lock lock(_socketsMutex);
     for (auto&& socketSubscribersSlot : _subscribers)
     {
       auto&& socket = socketSubscribersSlot.first;
-      removeFromGlobalIndex({ socket.get(), serviceId, qi::Message::GenericObject::GenericObject_Main });
+      removeFromGlobalIndex({ socket.get(), serviceId, qi::Message::GenericObject::GenericObject_Main }, object);
     }
   }
 
@@ -109,7 +110,7 @@ namespace qi {
         return false;
       }
       _boundObjects[id] = obj;
-      registerServiceForAllSocketsMessageReception(*obj, id);
+      registerServiceForAllSocketsMessageReception(obj, id);
       return true;
     }
   }
@@ -127,7 +128,7 @@ namespace qi {
       }
       removedObject = it->second;
       _boundObjects.erase(idx);
-      unregisterServiceForAllSocketsMessageReception(*removedObject, idx);
+      unregisterServiceForAllSocketsMessageReception(idx, *removedObject);
     }
     removedObject.reset();
     return true;

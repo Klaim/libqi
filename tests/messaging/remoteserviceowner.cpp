@@ -51,28 +51,23 @@ struct MyService {
   void test()
   {
     using namespace std::chrono;
-    /*static int callCount = 0;
-    ++callCount;*/
+    static int callCount = 0;
+    ++callCount;
     qi::AnyObject& o = list.back();
-    //qi::AnyObject& o = obj;
 
     // getting the content of the property
     for (int i = 0; i < 1; ++i)
     {
-      //const auto startTime = high_resolution_clock::now();
-
-      //int content = o.property<int>("prop").value();
-      std::this_thread::sleep_for(std::chrono::seconds(1));
+      const auto startTime = high_resolution_clock::now();
       int cont = o.call<int>("foo");
-      qiLogInfo("KIKOO") << "VALUE  = "  << cont;
-      //const auto endTime = high_resolution_clock::now();
+      const auto endTime = high_resolution_clock::now();
 
-      /*const auto discussDuration = endTime - startTime;
+      const auto discussDuration = endTime - startTime;
 
       qiLogInfo("TEST") << "Test " << callCount << " call " << i << " ID{" << o.ptrUid() << "} : "
         << duration_cast<milliseconds>(discussDuration).count() << " ms ("
         << duration_cast<nanoseconds>(discussDuration).count() << " ns)"
-        ;*/
+        ;
     }
 
   }

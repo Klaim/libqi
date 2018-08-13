@@ -100,8 +100,8 @@ namespace qi {
     void registerAllServicesForMessageReception(const MessageSocketPtr&);
     void unregisterAllServicesForMessageReception(const MessageSocketPtr&);
     void unregisterAllServicesForMessageReception();
-    void registerServiceForAllSocketsMessageReception(BoundObject&, unsigned int);
-    void unregisterServiceForAllSocketsMessageReception(BoundObject&, unsigned int);
+    void registerServiceForAllSocketsMessageReception(BoundAnyObject&, unsigned int serviceId);
+    void unregisterServiceForAllSocketsMessageReception(unsigned int serviceId, BoundObject& object);
   };
 }
 
